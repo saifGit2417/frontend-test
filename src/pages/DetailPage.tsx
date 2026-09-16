@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
   fetchAbility,
   fetchEggGroup,
@@ -21,90 +21,113 @@ import {
   type PokemonForm,
   type PokemonSpecies,
   type TypeDetail,
-} from '../api/pokeapi'
-import { formatName } from '../lib/format'
-import { AbilitiesSection } from './sections/AbilitiesSection'
-import { EggGroupsSection } from './sections/EggGroupsSection'
-import { EncountersSection } from './sections/EncountersSection'
-import { EvolutionSection } from './sections/EvolutionSection'
-import { FormsSection } from './sections/FormsSection'
-import { GrowthRateSection } from './sections/GrowthRateSection'
-import { OverviewSection } from './sections/OverviewSection'
-import { SignatureMoveSection } from './sections/SignatureMoveSection'
-import { SpeciesSection } from './sections/SpeciesSection'
-import { TypeMatchupsSection } from './sections/TypeMatchupsSection'
+} from "../api/pokeapi";
+import { formatName } from "../lib/format";
+import { AbilitiesSection } from "./sections/AbilitiesSection";
+import { EggGroupsSection } from "./sections/EggGroupsSection";
+import { EncountersSection } from "./sections/EncountersSection";
+import { EvolutionSection } from "./sections/EvolutionSection";
+import { FormsSection } from "./sections/FormsSection";
+import { GrowthRateSection } from "./sections/GrowthRateSection";
+import { OverviewSection } from "./sections/OverviewSection";
+import { SignatureMoveSection } from "./sections/SignatureMoveSection";
+import { SpeciesSection } from "./sections/SpeciesSection";
+import { TypeMatchupsSection } from "./sections/TypeMatchupsSection";
 
 type DetailData = {
-  pokemon: Pokemon
-  species: PokemonSpecies
-  evolution: EvolutionChain
-  types: TypeDetail[]
-  abilities: AbilityDetail[]
-  move: MoveDetail
-  encounters: Encounter[]
-  growthRate: GrowthRate
-  eggGroups: EggGroup[]
-  forms: PokemonForm[]
-}
+  pokemon: Pokemon;
+  species: PokemonSpecies;
+  evolution: EvolutionChain;
+  types: TypeDetail[];
+  abilities: AbilityDetail[];
+  move: MoveDetail;
+  encounters: Encounter[];
+  growthRate: GrowthRate;
+  eggGroups: EggGroup[];
+  forms: PokemonForm[];
+};
 
 export function DetailPage() {
-  const { name: pokemonName = '' } = useParams()
-  const [data, setData] = useState<DetailData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { name: pokemonName = "" } = useParams();
+  const [data, setData] = useState<DetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
-      setLoading(true)
-      setData(null)
+      setLoading(true);
+      setData(null);
+      setError(null);
 
-      const pokemon = await fetchPokemon(pokemonName)
-      const species = await fetchPokemonSpecies(pokemon.species.name)
-      const evolution = await fetchEvolutionChain(species.evolution_chain.url)
+      try {
+        const pokemon = await fetchPokemon(pokemonName);
+        const species = await fetchPokemonSpecies(pokemon.species.name);
+        const evolution = await fetchEvolutionChain(
+          species.evolution_chain.url,
+        );
 
-      const types: TypeDetail[] = []
-      for (const slot of pokemon.types) {
-        types.push(await fetchType(slot.type.name))
+        const [
+          types,
+          abilities,
+          move,
+          growthRate,
+          eggGroups,
+          forms,
+          encounters,
+        ] = await Promise.all([
+          Promise.all(pokemon.types.map((slot) => fetchType(slot.type.name))),
+          Promise.all(
+            pokemon.abilities.map((slot) => fetchAbility(slot.ability.name)),
+          ),
+          fetchMove(pokemon.moves[0].move.name),
+          fetchGrowthRate(species.growth_rate.name),
+          Promise.all(
+            species.egg_groups.map((group) => fetchEggGroup(group.name)),
+          ),
+          Promise.all(pokemon.forms.map((form) => fetchPokemonForm(form.name))),
+          fetchEncounters(pokemon.id),
+        ]);
+
+        if (cancelled) return;
+
+        setData({
+          pokemon,
+          species,
+          evolution,
+          types,
+          abilities,
+          move,
+          encounters,
+          growthRate,
+          eggGroups,
+          forms,
+        });
+        setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load Pokémon");
+        setLoading(false);
       }
-
-      const abilities: AbilityDetail[] = []
-      for (const slot of pokemon.abilities) {
-        abilities.push(await fetchAbility(slot.ability.name))
-      }
-
-      const firstMove = pokemon.moves[0]
-      const move = await fetchMove(firstMove.move.name)
-
-      const growthRate = await fetchGrowthRate(species.growth_rate.name)
-
-      const eggGroups: EggGroup[] = []
-      for (const group of species.egg_groups) {
-        eggGroups.push(await fetchEggGroup(group.name))
-      }
-
-      const forms: PokemonForm[] = []
-      for (const form of pokemon.forms) {
-        forms.push(await fetchPokemonForm(form.name))
-      }
-
-      const encounters = await fetchEncounters(pokemon.id)
-
-      setData({
-        pokemon,
-        species,
-        evolution,
-        types,
-        abilities,
-        move,
-        encounters,
-        growthRate,
-        eggGroups,
-        forms,
-      })
-      setLoading(false)
     }
 
-    load()
-  }, [pokemonName])
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [pokemonName]);
+
+  if (error) {
+    return (
+      <div className="page">
+        <Link className="back-button" to="/">
+          ← Back to list
+        </Link>
+        <div className="loading">Error loading Pokémon: {error}</div>
+      </div>
+    );
+  }
 
   if (loading || !data) {
     return (
@@ -114,7 +137,7 @@ export function DetailPage() {
         </Link>
         <div className="loading">Loading {formatName(pokemonName)}...</div>
       </div>
-    )
+    );
   }
 
   return (
@@ -134,5 +157,5 @@ export function DetailPage() {
       <EggGroupsSection eggGroups={data.eggGroups} />
       <FormsSection forms={data.forms} />
     </div>
-  )
+  );
 }

@@ -11,14 +11,27 @@ function getIdFromUrl(url: string): number {
 export function ListPage() {
   const [items, setItems] = useState<NamedResource[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    fetchPokemonList(PAGE_SIZE, 0).then((data) => {
-      setItems(data.results)
-      setLoading(false)
-    })
+    setError(null)
+    fetchPokemonList(PAGE_SIZE, 0)
+      .then((data) => {
+        if (cancelled) return
+        setItems(data.results)
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err instanceof Error ? err.message : 'Failed to load Pokédex')
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const filtered = items
@@ -32,6 +45,17 @@ export function ListPage() {
           <h1>Pokédex</h1>
         </header>
         <div className="loading">Loading Pokémon...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="page">
+        <header className="page-header">
+          <h1>Pokédex</h1>
+        </header>
+        <div className="loading">Error loading Pokédex: {error}</div>
       </div>
     )
   }
